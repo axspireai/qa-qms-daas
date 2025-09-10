@@ -1,4 +1,4 @@
-name: CI/CD Deploy to Cloud Run
+name: Deploy QA-QMS DAAS to Cloud Run
 
 on:
   push:
@@ -8,31 +8,32 @@ on:
 env:
   PROJECT_ID: qa-qms-daas
   REGION: us-central1
+  PROCESSOR_ID: "236690020d3b6944"  # Your Document AI Processor ID
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout code
+      # 1️⃣ Checkout repo
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 2️⃣ Authenticate to GCP
+      # 2️⃣ Authenticate with GCP Service Account
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 3️⃣ Setup gcloud CLI
-      - name: Setup gcloud
+      # 3️⃣ Install gcloud SDK
+      - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      # ------------------------------
+      # -------------------------
       # 4️⃣ Cloud Run: Document Processor
-      # ------------------------------
+      # -------------------------
       - name: Build & Push Document Processor
         run: |
           cd cloud-run-document-processor
@@ -45,14 +46,14 @@ jobs:
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars PROCESSOR_NAME="projects/$PROJECT_ID/locations/us/processors/236690020d3b6944"
+            --set-env-vars GCP_PROJECT=$PROJECT_ID,PROCESSOR_NAME="projects/$PROJECT_ID/locations/us/processors/$PROCESSOR_ID"
 
-      # ------------------------------
+      # -------------------------
       # 5️⃣ Cloud Run: Review Workflow
-      # ------------------------------
+      # -------------------------
       - name: Build & Push Review Workflow
         run: |
-          cd ../cloud-run-review-workflow
+          cd cloud-run-review-workflow
           gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-review-workflow
 
       - name: Deploy Review Workflow
@@ -63,12 +64,12 @@ jobs:
             --platform managed \
             --allow-unauthenticated
 
-      # ------------------------------
+      # -------------------------
       # 6️⃣ Cloud Run: Backend (Flask API)
-      # ------------------------------
+      # -------------------------
       - name: Build & Push Backend
         run: |
-          cd ../web-portal/backend
+          cd web-portal/backend
           gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-backend
 
       - name: Deploy Backend
@@ -80,12 +81,12 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars FIRESTORE_PROJECT=$PROJECT_ID
 
-      # ------------------------------
-      # 7️⃣ Cloud Run: Frontend (React App)
-      # ------------------------------
+      # -------------------------
+      # 7️⃣ Cloud Run: Frontend (React)
+      # -------------------------
       - name: Build & Push Frontend
         run: |
-          cd ../web-portal/frontend
+          cd web-portal/frontend
           REACT_APP_BACKEND_URL="https://qa-qms-backend-$PROJECT_ID.a.run.app" \
           gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-frontend
 
