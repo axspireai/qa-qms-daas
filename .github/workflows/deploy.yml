@@ -1,0 +1,83 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: us-central1
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      # --- Cloud Run Document Processor ---
+      - name: Build & Push Document Processor
+        run: |
+          cd cloud-run-document-processor
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-document-processor
+
+      - name: Deploy Document Processor
+        run: |
+          gcloud run deploy qa-qms-document-processor \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-document-processor \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated
+
+      # --- Cloud Run Review Workflow ---
+      - name: Build & Push Review Workflow
+        run: |
+          cd ../cloud-run-review-workflow
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-review-workflow
+
+      - name: Deploy Review Workflow
+        run: |
+          gcloud run deploy qa-qms-review-workflow \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-review-workflow \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated
+
+      # --- Backend ---
+      - name: Build & Push Backend
+        run: |
+          cd ../web-portal/backend
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-backend
+
+      - name: Deploy Backend
+        run: |
+          gcloud run deploy qa-qms-backend \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-backend \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars FIRESTORE_PROJECT=${{ secrets.GCP_PROJECT_ID }}
+
+      # --- Frontend ---
+      - name: Build & Push Frontend
+        run: |
+          cd ../frontend
+          REACT_APP_BACKEND_URL="https://qa-qms-backend-${{ secrets.GCP_PROJECT_ID }}.a.run.app" \
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-frontend
+
+      - name: Deploy Frontend
+        run: |
+          gcloud run deploy qa-qms-frontend \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-frontend \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated
