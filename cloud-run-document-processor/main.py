@@ -8,7 +8,8 @@ db = firestore.Client()
 publisher = pubsub_v1.PublisherClient()
 review_topic = publisher.topic_path(os.environ['GCP_PROJECT'], "review-required")
 
-PROCESSOR_NAME = "projects/YOUR_PROJECT/locations/us/processors/YOUR_PROCESSOR_ID"
+# Use environment variable for processor name
+PROCESSOR_NAME = os.environ.get("PROCESSOR_NAME")
 
 @app.route("/", methods=["POST"])
 def pubsub_listener():
@@ -24,8 +25,8 @@ def pubsub_listener():
     # Document AI processing
     client = documentai.DocumentProcessorServiceClient()
     document = {"uri": f"gs://{bucket}/{name}"}
-    request = {"name": PROCESSOR_NAME, "raw_document": document}
-    result = client.process_document(request=request)
+    request_doc = {"name": PROCESSOR_NAME, "raw_document": document}
+    result = client.process_document(request=request_doc)
     text = result.document.text
 
     # Store metadata in Firestore
@@ -38,3 +39,8 @@ def pubsub_listener():
     # Publish message to review workflow
     publisher.publish(review_topic, json.dumps({'document_name': name}).encode('utf-8'))
     return "Processed", 200
+
+# --- Start Flask on the port Cloud Run expects ---
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)

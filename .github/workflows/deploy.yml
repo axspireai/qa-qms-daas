@@ -1,4 +1,4 @@
-name: Deploy to Cloud Run
+name: CI/CD Deploy to Cloud Run
 
 on:
   push:
@@ -14,25 +14,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout repo
-      - name: Checkout repo
+      # 1️⃣ Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      # Authenticate with GCP using Service Account JSON
+      # 2️⃣ Authenticate to GCP
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # Install gcloud SDK
-      - name: Set up gcloud
+      # 3️⃣ Setup gcloud CLI
+      - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      # -------------------------
-      # Cloud Run Document Processor
-      # -------------------------
+      # ------------------------------
+      # 4️⃣ Cloud Run: Document Processor
+      # ------------------------------
       - name: Build & Push Document Processor
         run: |
           cd cloud-run-document-processor
@@ -44,11 +44,12 @@ jobs:
             --image gcr.io/$PROJECT_ID/qa-qms-document-processor \
             --region $REGION \
             --platform managed \
-            --allow-unauthenticated
+            --allow-unauthenticated \
+            --set-env-vars PROCESSOR_NAME="projects/$PROJECT_ID/locations/us/processors/YOUR_PROCESSOR_ID"
 
-      # -------------------------
-      # Cloud Run Review Workflow
-      # -------------------------
+      # ------------------------------
+      # 5️⃣ Cloud Run: Review Workflow
+      # ------------------------------
       - name: Build & Push Review Workflow
         run: |
           cd ../cloud-run-review-workflow
@@ -62,9 +63,9 @@ jobs:
             --platform managed \
             --allow-unauthenticated
 
-      # -------------------------
-      # Backend (Flask API)
-      # -------------------------
+      # ------------------------------
+      # 6️⃣ Cloud Run: Backend (Flask API)
+      # ------------------------------
       - name: Build & Push Backend
         run: |
           cd ../web-portal/backend
@@ -79,12 +80,12 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars FIRESTORE_PROJECT=$PROJECT_ID
 
-      # -------------------------
-      # Frontend (React app)
-      # -------------------------
+      # ------------------------------
+      # 7️⃣ Cloud Run: Frontend (React App)
+      # ------------------------------
       - name: Build & Push Frontend
         run: |
-          cd ../frontend
+          cd ../web-portal/frontend
           REACT_APP_BACKEND_URL="https://qa-qms-backend-$PROJECT_ID.a.run.app" \
           gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-frontend
 
