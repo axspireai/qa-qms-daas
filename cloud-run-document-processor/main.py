@@ -1,99 +1,81 @@
-name: Deploy to Cloud Run
+from flask import Flask, request
+from google.cloud import documentai_v1 as documentai
+from google.cloud import firestore, pubsub_v1
+import json, base64, os
 
-on:
-  push:
-    branches:
-      - main
+# Initialize Flask app
+app = Flask(__name__)
 
-env:
-  PROJECT_ID: qa-qms-daas
-  REGION: us-central1
-  PROCESSOR_ID: "YOUR_PROCESSOR_ID" # <-- replace with your actual processor ID
+# Firestore client
+db = firestore.Client()
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+# Pub/Sub publisher
+publisher = pubsub_v1.PublisherClient()
 
-    steps:
-      # Checkout repo
-      - name: Checkout repo
-        uses: actions/checkout@v3
+# Project ID (from env)
+PROJECT_ID = os.environ.get("GCP_PROJECT", "")
+# Review topic (must exist in Pub/Sub)
+review_topic = publisher.topic_path(PROJECT_ID, "review-required")
 
-      # Authenticate with GCP using Service Account JSON
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+# Document AI processor name (from env)
+# Example: projects/qa-qms-daas/locations/us/processors/1234567890abcdef
+PROCESSOR_NAME = os.environ.get("PROCESSOR_NAME")
 
-      # Install gcloud SDK
-      - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
 
-      # -------------------------
-      # Cloud Run Document Processor
-      # -------------------------
-      - name: Build & Push Document Processor
-        run: |
-          cd cloud-run-document-processor
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-document-processor
+@app.route("/", methods=["POST"])
+def pubsub_listener():
+    """Receive Pub/Sub messages and process documents with Document AI."""
+    envelope = request.get_json()
+    if not envelope or "message" not in envelope:
+        return "Invalid Pub/Sub message", 400
 
-      - name: Deploy Document Processor
-        run: |
-          gcloud run deploy qa-qms-document-processor \
-            --image gcr.io/$PROJECT_ID/qa-qms-document-processor \
-            --region $REGION \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars PROCESSOR_NAME="projects/$PROJECT_ID/locations/us/processors/$PROCESSOR_ID"
+    pubsub_message = base64.b64decode(envelope["message"]["data"]).decode("utf-8")
+    message_json = json.loads(pubsub_message)
 
-      # -------------------------
-      # Cloud Run Review Workflow
-      # -------------------------
-      - name: Build & Push Review Workflow
-        run: |
-          cd ../cloud-run-review-workflow
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-review-workflow
+    bucket = message_json.get("bucket")
+    name = message_json.get("name")
 
-      - name: Deploy Review Workflow
-        run: |
-          gcloud run deploy qa-qms-review-workflow \
-            --image gcr.io/$PROJECT_ID/qa-qms-review-workflow \
-            --region $REGION \
-            --platform managed \
-            --allow-unauthenticated
+    if not bucket or not name:
+        return "Missing bucket or file name", 400
 
-      # -------------------------
-      # Backend (Flask API)
-      # -------------------------
-      - name: Build & Push Backend
-        run: |
-          cd ../web-portal/backend
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-backend
+    # Document AI processing
+    client = documentai.DocumentProcessorServiceClient()
+    gcs_document = {"gcs_document": {"gcs_uri": f"gs://{bucket}/{name}", "mime_type": "application/pdf"}}
+    request_doc = {"name": PROCESSOR_NAME, "input_documents": gcs_document}
 
-      - name: Deploy Backend
-        run: |
-          gcloud run deploy qa-qms-backend \
-            --image gcr.io/$PROJECT_ID/qa-qms-backend \
-            --region $REGION \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars FIRESTORE_PROJECT=$PROJECT_ID
+    try:
+        result = client.process_document(request={"name": PROCESSOR_NAME, "raw_document": {
+            "content": f"gs://{bucket}/{name}".encode("utf-8"),
+            "mime_type": "application/pdf"
+        }})
+        text = result.document.text
+    except Exception as e:
+        return f"Document AI error: {str(e)}", 500
 
-      # -------------------------
-      # Frontend (React app)
-      # -------------------------
-      - name: Build & Push Frontend
-        run: |
-          cd ../frontend
-          REACT_APP_BACKEND_URL="https://qa-qms-backend-$PROJECT_ID.a.run.app" \
-          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-frontend
+    # Store metadata in Firestore
+    db.collection("documents").document(name).set({
+        "document_name": name,
+        "gcs_path": f"gs://{bucket}/{name}",
+        "text": text,
+        "status": "Uploaded"
+    })
 
-      - name: Deploy Frontend
-        run: |
-          gcloud run deploy qa-qms-frontend \
-            --image gcr.io/$PROJECT_ID/qa-qms-frontend \
-            --region $REGION \
-            --platform managed \
-            --allow-unauthenticated
+    # Publish message to review workflow
+    publisher.publish(
+        review_topic,
+        json.dumps({"document_name": name}).encode("utf-8")
+    )
+
+    return "Processed", 200
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """Health check endpoint for Cloud Run."""
+    return "OK", 200
+
+
+# Start Flask app
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)

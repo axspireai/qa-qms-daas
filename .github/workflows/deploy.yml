@@ -45,7 +45,7 @@ jobs:
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars PROCESSOR_NAME="projects/$PROJECT_ID/locations/us/processors/YOUR_PROCESSOR_ID"
+            --set-env-vars PROCESSOR_NAME="projects/$PROJECT_ID/locations/us/processors/236690020d3b6944"
 
       # ------------------------------
       # 5️⃣ Cloud Run: Review Workflow
