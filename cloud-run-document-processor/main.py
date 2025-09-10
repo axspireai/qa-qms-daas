@@ -12,14 +12,15 @@ db = firestore.Client()
 # Pub/Sub publisher
 publisher = pubsub_v1.PublisherClient()
 
-# Project ID (from env)
-PROJECT_ID = os.environ.get("GCP_PROJECT", "")
-# Review topic (must exist in Pub/Sub)
+# Project ID and review topic
+PROJECT_ID = os.environ.get("GCP_PROJECT", "qa-qms-daas")
 review_topic = publisher.topic_path(PROJECT_ID, "review-required")
 
-# Document AI processor name (from env)
-# Example: projects/qa-qms-daas/locations/us/processors/1234567890abcdef
-PROCESSOR_NAME = os.environ.get("PROCESSOR_NAME")
+# Document AI processor name (use your actual processor ID)
+PROCESSOR_NAME = os.environ.get(
+    "PROCESSOR_NAME",
+    "projects/qa-qms-daas/locations/us/processors/236690020d3b6944"
+)
 
 
 @app.route("/", methods=["POST"])
@@ -34,20 +35,22 @@ def pubsub_listener():
 
     bucket = message_json.get("bucket")
     name = message_json.get("name")
-
     if not bucket or not name:
         return "Missing bucket or file name", 400
 
     # Document AI processing
     client = documentai.DocumentProcessorServiceClient()
-    gcs_document = {"gcs_document": {"gcs_uri": f"gs://{bucket}/{name}", "mime_type": "application/pdf"}}
-    request_doc = {"name": PROCESSOR_NAME, "input_documents": gcs_document}
-
+    raw_doc = documentai.RawDocument(
+        gcs_uri=f"gs://{bucket}/{name}",
+        mime_type="application/pdf"
+    )
     try:
-        result = client.process_document(request={"name": PROCESSOR_NAME, "raw_document": {
-            "content": f"gs://{bucket}/{name}".encode("utf-8"),
-            "mime_type": "application/pdf"
-        }})
+        result = client.process_document(
+            request=documentai.ProcessRequest(
+                name=PROCESSOR_NAME,
+                raw_document=raw_doc
+            )
+        )
         text = result.document.text
     except Exception as e:
         return f"Document AI error: {str(e)}", 500
@@ -61,10 +64,11 @@ def pubsub_listener():
     })
 
     # Publish message to review workflow
-    publisher.publish(
+    future = publisher.publish(
         review_topic,
         json.dumps({"document_name": name}).encode("utf-8")
     )
+    future.result()  # Ensure the message is published
 
     return "Processed", 200
 
@@ -75,7 +79,7 @@ def health():
     return "OK", 200
 
 
-# Start Flask app
+# Start Flask app (Cloud Run requires binding to PORT)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
