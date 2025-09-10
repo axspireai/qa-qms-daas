@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  PROJECT_ID: pharma-daas-poc
+  PROJECT_ID: qa-qms-daas
   REGION: us-central1
 
 jobs:
@@ -14,70 +14,84 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout repo
       - name: Checkout repo
         uses: actions/checkout@v3
 
+      # Authenticate with GCP using Service Account JSON
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install gcloud SDK
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: pharma-daas-poc
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
-          export_default_credentials: true
+          project_id: ${{ env.PROJECT_ID }}
 
-      # --- Cloud Run Document Processor ---
+      # -------------------------
+      # Cloud Run Document Processor
+      # -------------------------
       - name: Build & Push Document Processor
         run: |
           cd cloud-run-document-processor
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-document-processor
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-document-processor
 
       - name: Deploy Document Processor
         run: |
           gcloud run deploy qa-qms-document-processor \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-document-processor \
+            --image gcr.io/$PROJECT_ID/qa-qms-document-processor \
             --region $REGION \
             --platform managed \
             --allow-unauthenticated
 
-      # --- Cloud Run Review Workflow ---
+      # -------------------------
+      # Cloud Run Review Workflow
+      # -------------------------
       - name: Build & Push Review Workflow
         run: |
           cd ../cloud-run-review-workflow
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-review-workflow
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-review-workflow
 
       - name: Deploy Review Workflow
         run: |
           gcloud run deploy qa-qms-review-workflow \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-review-workflow \
+            --image gcr.io/$PROJECT_ID/qa-qms-review-workflow \
             --region $REGION \
             --platform managed \
             --allow-unauthenticated
 
-      # --- Backend ---
+      # -------------------------
+      # Backend (Flask API)
+      # -------------------------
       - name: Build & Push Backend
         run: |
           cd ../web-portal/backend
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-backend
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-backend
 
       - name: Deploy Backend
         run: |
           gcloud run deploy qa-qms-backend \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-backend \
+            --image gcr.io/$PROJECT_ID/qa-qms-backend \
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
-            --set-env-vars FIRESTORE_PROJECT=${{ secrets.GCP_PROJECT_ID }}
+            --set-env-vars FIRESTORE_PROJECT=$PROJECT_ID
 
-      # --- Frontend ---
+      # -------------------------
+      # Frontend (React app)
+      # -------------------------
       - name: Build & Push Frontend
         run: |
           cd ../frontend
-          REACT_APP_BACKEND_URL="https://qa-qms-backend-${{ secrets.GCP_PROJECT_ID }}.a.run.app" \
-          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-frontend
+          REACT_APP_BACKEND_URL="https://qa-qms-backend-$PROJECT_ID.a.run.app" \
+          gcloud builds submit --tag gcr.io/$PROJECT_ID/qa-qms-frontend
 
       - name: Deploy Frontend
         run: |
           gcloud run deploy qa-qms-frontend \
-            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/qa-qms-frontend \
+            --image gcr.io/$PROJECT_ID/qa-qms-frontend \
             --region $REGION \
             --platform managed \
             --allow-unauthenticated
