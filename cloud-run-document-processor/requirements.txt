@@ -1,4 +1,4 @@
-Flask==2.3.4
+Flask==2.3.3
 google-cloud-documentai==2.11.0
 google-cloud-firestore==2.10.4
 google-cloud-pubsub==2.18.0
