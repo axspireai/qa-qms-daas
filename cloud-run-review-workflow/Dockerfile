@@ -1,12 +1,17 @@
-FROM node:20-slim AS build
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install --legacy-peer-deps
-COPY . .
-RUN npm run build
+# Python 3.11 slim image
+FROM python:3.11-slim
 
-FROM nginx:alpine
-RUN rm -rf /usr/share/nginx/html/*
-COPY --from=build /app/build /usr/share/nginx/html
-EXPOSE 8080
-CMD ["nginx", "-g", "daemon off;"]
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the Python app code
+COPY . .
+
+# Cloud Run expects PORT env variable
+ENV PORT 8080
+
+# Use Gunicorn to serve Flask app
+CMD ["gunicorn", "--bind", ":8080", "--workers", "1", "--threads", "8", "--timeout", "0", "main:app"]
