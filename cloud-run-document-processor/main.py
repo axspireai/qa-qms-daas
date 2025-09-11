@@ -16,7 +16,7 @@ publisher = pubsub_v1.PublisherClient()
 PROJECT_ID = os.environ.get("GCP_PROJECT", "qa-qms-daas")
 review_topic = publisher.topic_path(PROJECT_ID, "review-required")
 
-# Document AI processor name (use your actual processor ID)
+# Document AI processor name (update with your processor ID if needed)
 PROCESSOR_NAME = os.environ.get(
     "PROCESSOR_NAME",
     "projects/qa-qms-daas/locations/us/processors/236690020d3b6944"
@@ -38,18 +38,23 @@ def pubsub_listener():
     if not bucket or not name:
         return "Missing bucket or file name", 400
 
-    # Document AI processing
+    # Document AI processing using GCS input
     client = documentai.DocumentProcessorServiceClient()
-    raw_doc = documentai.RawDocument(
+
+    gcs_document = documentai.GcsDocument(
         gcs_uri=f"gs://{bucket}/{name}",
         mime_type="application/pdf"
     )
+    input_config = documentai.BatchDocumentsInputConfig(
+        gcs_documents=documentai.GcsDocuments(documents=[gcs_document])
+    )
+
     try:
         result = client.process_document(
-            request=documentai.ProcessRequest(
-                name=PROCESSOR_NAME,
-                raw_document=raw_doc
-            )
+            request={
+                "name": PROCESSOR_NAME,
+                "input_documents": input_config
+            }
         )
         text = result.document.text
     except Exception as e:
