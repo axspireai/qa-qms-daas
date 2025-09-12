@@ -6,7 +6,7 @@ import os
 app = Flask(__name__)
 
 # Enable CORS for your frontend URL
-CORS(app, origins=["https://qa-qms-backend-390246759219.us-central1.run.app/"])
+CORS(app, origins=["https://qa-qms-frontend-390246759219.us-central1.run.app"], supports_credentials=True)
 
 # Firestore init
 project_id = os.getenv("FIRESTORE_PROJECT")
