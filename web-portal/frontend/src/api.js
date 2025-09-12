@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const BASE_URL =
-  window._env_?.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  window._env_?.REACT_APP_BACKEND_URL;
 
 export const getDocuments = async () => {
   const response = await axios.get(`${BASE_URL}/documents`);
