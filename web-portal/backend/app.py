@@ -1,8 +1,12 @@
 from flask import Flask, request, jsonify
 from google.cloud import firestore
+from flask_cors import CORS  # <-- import CORS
 import os
 
 app = Flask(__name__)
+
+# Enable CORS for your frontend URL
+CORS(app, origins=["https://qa-qms-frontend-390246759219.us-central1.run.app"])
 
 # Firestore init
 project_id = os.getenv("FIRESTORE_PROJECT")
