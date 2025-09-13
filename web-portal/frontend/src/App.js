@@ -7,30 +7,16 @@ function App() {
 
   const fetchDocuments = async () => {
     setLoading(true);
-    try {
-      const docs = await getDocuments();
-      console.log("📦 API raw response:", docs); // Debugging
-      // Ensure it's always an array
-      setDocuments(Array.isArray(docs) ? docs : []);
-    } catch (err) {
-      console.error("❌ Error fetching documents:", err);
-      setDocuments([]); // fallback to empty
-    } finally {
-      setLoading(false);
-    }
+    const docs = await getDocuments();
+    setDocuments(docs);
+    setLoading(false);
   };
 
   const handleAction = async (docId, action) => {
     const reviewerEmail = prompt("Enter your email:");
     const reviewerName = prompt("Enter your name:");
-    if (!reviewerEmail || !reviewerName) return;
-
-    try {
-      await reviewDocument(docId, action, reviewerEmail, reviewerName);
-      fetchDocuments();
-    } catch (err) {
-      console.error("❌ Error submitting review:", err);
-    }
+    await reviewDocument(docId, action, reviewerEmail, reviewerName);
+    fetchDocuments();
   };
 
   useEffect(() => {
@@ -42,32 +28,35 @@ function App() {
   return (
     <div style={{ padding: "20px" }}>
       <h1>QA/QMS Document Review</h1>
-
-      {documents.length === 0 ? (
-        <p>No documents found.</p>
-      ) : (
-        <table border="1" cellPadding="10">
-          <thead>
+      <table border="1" cellPadding="10">
+        <thead>
+          <tr>
+            <th>Document</th>
+            <th>Status</th>
+            <th>Reviewers</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {documents.length === 0 ? (
             <tr>
-              <th>Document</th>
-              <th>Status</th>
-              <th>Reviewers</th>
-              <th>Actions</th>
+              <td colSpan="4" style={{ textAlign: "center" }}>
+                No documents found.
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {documents.map((doc) => (
-              <tr key={doc.document_name}>
-                <td>{doc.document_name}</td>
+          ) : (
+            documents.map((doc) => (
+              <tr key={doc.id}>
+                <td>{doc.document_name || doc.id}</td>
                 <td>{doc.status}</td>
-                <td>{doc.reviewers ? doc.reviewers.join(", ") : "-"}</td>
+                <td>{doc.reviewers && doc.reviewers.length > 0 ? doc.reviewers.join(", ") : "-"}</td>
                 <td>
-                  {doc.status === "Review Pending" || doc.status === "Uploaded" ? (
+                  {doc.status === "Review Pending" || doc.status === "uploaded" ? (
                     <>
-                      <button onClick={() => handleAction(doc.document_name, "approve")}>
+                      <button onClick={() => handleAction(doc.id, "approve")}>
                         Approve
                       </button>
-                      <button onClick={() => handleAction(doc.document_name, "reject")}>
+                      <button onClick={() => handleAction(doc.id, "reject")}>
                         Reject
                       </button>
                     </>
@@ -76,10 +65,10 @@ function App() {
                   )}
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
