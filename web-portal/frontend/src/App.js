@@ -55,38 +55,29 @@ function App() {
             <th>Actions</th>
           </tr>
         </thead>
-        <tbody>
-          {documents.map((doc) => (
-            <tr key={doc.document_name}>
-              <td>{doc.document_name}</td>
-              <td>{doc.status}</td>
-              <td>
-                {doc.reviewers && doc.reviewers.length
-                  ? doc.reviewers.join(", ")
-                  : "-"}
-              </td>
-              <td>
-                {doc.status === "Review Pending" || doc.status === "uploaded" ? (
-                  <>
-                    <button
-                      onClick={() => handleAction(doc.document_name, "approve")}
-                      style={{ marginRight: "5px" }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleAction(doc.document_name, "reject")}
-                    >
-                      Reject
-                    </button>
-                  </>
-                ) : (
-                  "N/A"
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
+<tbody>
+  {documents.map((doc) => (
+    <tr key={doc.document_name}>
+      <td>{doc.name}</td>  {/* human-readable name */}
+      <td>{doc.status}</td>
+      <td>{doc.reviewers ? doc.reviewers.join(", ") : "-"}</td>
+      <td>
+        {doc.status === "Review Pending" || doc.status === "uploaded" ? (
+          <>
+            <button onClick={() => handleAction(doc.document_name, "approve")}>
+              Approve
+            </button>
+            <button onClick={() => handleAction(doc.document_name, "reject")}>
+              Reject
+            </button>
+          </>
+        ) : (
+          "N/A"
+        )}
+      </td>
+    </tr>
+  ))}
+</tbody>
       </table>
     </div>
   );
